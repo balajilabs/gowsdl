@@ -46,6 +46,17 @@ type SOAPBody struct {
 	Content interface{} `xml:",omitempty"`
 }
 
+type SOAPHeader struct {
+	XMLName xml.Name         `xml:"http://www.w3.org/2003/05/soap-envelope Header"`
+	Action  SOAPActionHeader `xml:"Action,omitempty"`
+}
+
+type SOAPActionHeader struct {
+	XMLName        xml.Name `xml:"http://www.w3.org/2005/08/addressing Action"`
+	MustUnderstand string   `xml:"http://www.w3.org/2003/05/soap-envelope mustUnderstand,attr,omitempty"`
+	Data           string   `xml:",chardata"`
+}
+
 // UnmarshalXML unmarshals SOAPBody xml
 func (b *SOAPBody) UnmarshalXML(d *xml.Decoder, _ xml.StartElement) error {
 	if b.Content == nil {
@@ -315,12 +326,15 @@ func (s *Client) call(ctx context.Context, soapAction string, request, response 
 
 	var envelope interface{}
 
+	header := SOAPHeader{Action: SOAPActionHeader{MustUnderstand: "1", Data: soapAction}}
+
 	if s.opts.soap_1_1 {
 		soap1Envelope := SOAPEnvelope_1_1{}
 
 		if s.headers != nil && len(s.headers) > 0 {
 			soap1Envelope.Headers = s.headers
 		}
+		soap1Envelope.Headers = append(soap1Envelope.Headers, header)
 
 		soap1Envelope.Body.Content = request
 		envelope = soap1Envelope
@@ -330,6 +344,7 @@ func (s *Client) call(ctx context.Context, soapAction string, request, response 
 		if s.headers != nil && len(s.headers) > 0 {
 			soapEnvelope.Headers = s.headers
 		}
+		soapEnvelope.Headers = append(soapEnvelope.Headers, header)
 
 		soapEnvelope.Body.Content = request
 		envelope = soapEnvelope

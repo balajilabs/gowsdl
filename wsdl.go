@@ -171,7 +171,7 @@ type WSDLOperation struct {
 	Input         WSDLInput         `xml:"input"`
 	Output        WSDLOutput        `xml:"output"`
 	Faults        []*WSDLFault      `xml:"fault"`
-	SOAPOperation WSDLSOAPOperation `xml:"http://schemas.xmlsoap.org/wsdl/soap/ operation"`
+	SOAPOperation WSDLSOAPOperation `xml:"http://schemas.xmlsoap.org/wsdl/soap12/ operation" xml:"http://schemas.xmlsoap.org/wsdl/soap/ operation"`
 }
 
 // WSDLPortType defines the service, operations that can be performed and the messages involved.
