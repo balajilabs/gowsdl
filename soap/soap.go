@@ -418,7 +418,7 @@ func (s *Client) call(ctx context.Context, soapAction string, request, response 
 	var dec SOAPDecoder
 	if mtomBoundary != "" {
 		dec = newMtomDecoder(res.Body, mtomBoundary)
-	} else if s.opts.encOption != ENCOptionMSBIN {
+	} else if s.opts.encOption == ENCOptionMSBIN {
 		dec = newMSBINDecoder(res.Body)
 	} else {
 		dec = xml.NewDecoder(res.Body)
@@ -428,11 +428,15 @@ func (s *Client) call(ctx context.Context, soapAction string, request, response 
 		return err
 	}
 
-	var fault error
+	var fault error = nil
 	if s.opts.soap_1_1 {
-		fault = respEnvelope.(SOAPEnvelope_1_1).Body.Fault
+		if respEnvelope.(*SOAPEnvelope).Body.Fault != nil { //things goes crazy if this check is removed
+			fault = respEnvelope.(*SOAPEnvelope_1_1).Body.Fault
+		}
 	} else {
-		fault = respEnvelope.(SOAPEnvelope).Body.Fault
+		if respEnvelope.(*SOAPEnvelope).Body.Fault != nil { //things goes crazy if this check is removed
+			fault = respEnvelope.(*SOAPEnvelope).Body.Fault
+		}
 	}
 
 	if fault != nil {

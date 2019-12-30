@@ -1,8 +1,6 @@
 ./gowsdl
-myservice
-build
+dist/
+bin/
+build/
 .DS_Store
-dist
-bin/gowsdl.exe
-bin/SystemInfo.wsdl
-bin/systeminfo/systeminfo.go
+go.sum
