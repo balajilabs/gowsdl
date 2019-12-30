@@ -3,3 +3,6 @@ myservice
 build
 .DS_Store
 dist
+bin/gowsdl.exe
+bin/SystemInfo.wsdl
+bin/systeminfo/systeminfo.go

@@ -424,9 +424,9 @@ var xsd2GoTypes = map[string]string{
 	"byte":          "int8",
 	"long":          "int64",
 	"boolean":       "bool",
-	"datetime":      "time.Time",
-	"date":          "time.Time",
-	"time":          "time.Time",
+	"datetime":      "string", //TODO: it was time.Time, need to add custom type
+	"date":          "string", //TODO: it was time.Time, need to add custom type
+	"time":          "string", //TODO: it was time.Time, need to add custom type
 	"base64binary":  "[]byte",
 	"hexbinary":     "[]byte",
 	"unsignedint":   "uint32",
@@ -436,6 +436,7 @@ var xsd2GoTypes = map[string]string{
 	"anytype":       "AnyType",
 	"ncname":        "NCName",
 	"anyuri":        "AnyURI",
+	//"duration":      "string",
 }
 
 func removeNS(xsdType string) string {

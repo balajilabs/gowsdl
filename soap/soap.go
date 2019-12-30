@@ -20,14 +20,27 @@ type SOAPDecoder interface {
 	Decode(v interface{}) error
 }
 
-type SOAPEnvelope struct {
+type SOAPEnvelope_1_1 struct {
 	XMLName xml.Name      `xml:"http://schemas.xmlsoap.org/soap/envelope/ Envelope"`
 	Headers []interface{} `xml:"http://schemas.xmlsoap.org/soap/envelope/ Header"`
+	Body    SOAPBody_1_1
+}
+
+type SOAPBody_1_1 struct {
+	XMLName xml.Name `xml:"http://schemas.xmlsoap.org/soap/envelope/ Body"`
+
+	Fault   *SOAPFault  `xml:",omitempty"`
+	Content interface{} `xml:",omitempty"`
+}
+
+type SOAPEnvelope struct {
+	XMLName xml.Name      `xml:"http://www.w3.org/2003/05/soap-envelope Envelope"`
+	Headers []interface{} `xml:"http://www.w3.org/2003/05/soap-envelope Header"`
 	Body    SOAPBody
 }
 
 type SOAPBody struct {
-	XMLName xml.Name `xml:"http://schemas.xmlsoap.org/soap/envelope/ Body"`
+	XMLName xml.Name `xml:"http://www.w3.org/2003/05/soap-envelope Body"`
 
 	Fault   *SOAPFault  `xml:",omitempty"`
 	Content interface{} `xml:",omitempty"`
@@ -162,8 +175,16 @@ type options struct {
 	tlshshaketimeout time.Duration
 	client           HTTPClient
 	httpHeaders      map[string]string
-	mtom             bool
+	encOption        ENCOption
+	soap_1_1         bool
 }
+
+type ENCOption int
+
+const (
+	ENCOptionMTOM  ENCOption = 1
+	ENCOptionMSBIN ENCOption = 2
+)
 
 var defaultOptions = options{
 	timeout:          time.Duration(30 * time.Second),
@@ -232,7 +253,21 @@ func WithHTTPHeaders(headers map[string]string) Option {
 // MTOM encodes fields of type Binary using XOP.
 func WithMTOM() Option {
 	return func(o *options) {
-		o.mtom = true
+		o.encOption = ENCOptionMTOM
+	}
+}
+
+//Microsoft binary encoding scheme will be used
+func WithMSBIN() Option {
+	return func(o *options) {
+		o.encOption = ENCOptionMSBIN
+	}
+}
+
+//SOAP 1.1 support
+func WithSOAP_1_1() Option {
+	return func(o *options) {
+		o.soap_1_1 = true
 	}
 }
 
@@ -277,17 +312,35 @@ func (s *Client) Call(soapAction string, request, response interface{}) error {
 }
 
 func (s *Client) call(ctx context.Context, soapAction string, request, response interface{}) error {
-	envelope := SOAPEnvelope{}
 
-	if s.headers != nil && len(s.headers) > 0 {
-		envelope.Headers = s.headers
+	var envelope interface{}
+
+	if s.opts.soap_1_1 {
+		soap1Envelope := SOAPEnvelope_1_1{}
+
+		if s.headers != nil && len(s.headers) > 0 {
+			soap1Envelope.Headers = s.headers
+		}
+
+		soap1Envelope.Body.Content = request
+		envelope = soap1Envelope
+	} else {
+		soapEnvelope := SOAPEnvelope{}
+
+		if s.headers != nil && len(s.headers) > 0 {
+			soapEnvelope.Headers = s.headers
+		}
+
+		soapEnvelope.Body.Content = request
+		envelope = soapEnvelope
 	}
 
-	envelope.Body.Content = request
 	buffer := new(bytes.Buffer)
 	var encoder SOAPEncoder
-	if s.opts.mtom {
+	if s.opts.encOption == ENCOptionMTOM {
 		encoder = newMtomEncoder(buffer)
+	} else if s.opts.encOption == ENCOptionMSBIN {
+		encoder = newMSBINEncoder(buffer)
 	} else {
 		encoder = xml.NewEncoder(buffer)
 	}
@@ -310,8 +363,10 @@ func (s *Client) call(ctx context.Context, soapAction string, request, response 
 
 	req = req.WithContext(ctx)
 
-	if s.opts.mtom {
+	if s.opts.encOption == ENCOptionMTOM {
 		req.Header.Add("Content-Type", fmt.Sprintf(mtomContentType, encoder.(*mtomEncoder).Boundary()))
+	} else if s.opts.encOption == ENCOptionMSBIN {
+		req.Header.Add("Content-Type", "application/soap+msbin1")
 	} else {
 		req.Header.Add("Content-Type", "text/xml; charset=\"utf-8\"")
 	}
@@ -343,8 +398,17 @@ func (s *Client) call(ctx context.Context, soapAction string, request, response 
 	}
 	defer res.Body.Close()
 
-	respEnvelope := new(SOAPEnvelope)
-	respEnvelope.Body = SOAPBody{Content: response}
+	var respEnvelope interface{}
+
+	if s.opts.soap_1_1 {
+		respEnvelope_1_1 := new(SOAPEnvelope_1_1)
+		respEnvelope_1_1.Body = SOAPBody_1_1{Content: response}
+		respEnvelope = respEnvelope_1_1
+	} else {
+		respEnvelope_1_2 := new(SOAPEnvelope)
+		respEnvelope_1_2.Body = SOAPBody{Content: response}
+		respEnvelope = respEnvelope_1_2
+	}
 
 	mtomBoundary, err := getMtomHeader(res.Header.Get("Content-Type"))
 	if err != nil {
@@ -354,6 +418,8 @@ func (s *Client) call(ctx context.Context, soapAction string, request, response 
 	var dec SOAPDecoder
 	if mtomBoundary != "" {
 		dec = newMtomDecoder(res.Body, mtomBoundary)
+	} else if s.opts.encOption != ENCOptionMSBIN {
+		dec = newMSBINDecoder(res.Body)
 	} else {
 		dec = xml.NewDecoder(res.Body)
 	}
@@ -362,7 +428,13 @@ func (s *Client) call(ctx context.Context, soapAction string, request, response 
 		return err
 	}
 
-	fault := respEnvelope.Body.Fault
+	var fault error
+	if s.opts.soap_1_1 {
+		fault = respEnvelope.(SOAPEnvelope_1_1).Body.Fault
+	} else {
+		fault = respEnvelope.(SOAPEnvelope).Body.Fault
+	}
+
 	if fault != nil {
 		return fault
 	}

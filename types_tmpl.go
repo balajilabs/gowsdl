@@ -6,28 +6,45 @@ package gowsdl
 
 var typesTmpl = `
 {{define "SimpleType"}}
-	{{$type := replaceReservedWords .Name | makePublic}}
-	{{if .Doc}} {{.Doc | comment}} {{end}}
-	{{if ne .List.ItemType ""}}
-		type {{$type}} []{{toGoType .List.ItemType }}
-	{{else if ne .Union.MemberTypes ""}}
-		type {{$type}} string
-	{{else if .Union.SimpleType}}
-		type {{$type}} string
+	{{if (or (.Restriction.Enumeration) (.List.SimpleType))}}
+		{{template "Enums" .}}
 	{{else}}
-		type {{$type}} {{toGoType .Restriction.Base}}
-	{{end}}
+		{{$type := replaceReservedWords .Name | makePublic}}
+		{{if .Doc}} {{.Doc | comment}} {{end}}
+		{{if ne .List.ItemType ""}}
+			type {{$type}} []{{toGoType .List.ItemType }}
+		{{else if ne .Union.MemberTypes ""}}
+			type {{$type}} string
+		{{else if .Union.SimpleType}}
+			type {{$type}} string
+		{{else}}
+			{{if .Restriction.Pattern}}
+				type {{$type}} string
+			{{else}}
+				type {{$type}} {{toGoType .Restriction.Base}}
+			{{end}}
+		{{end}}
+	{{end}}	
+{{end}}
 
-	{{if .Restriction.Enumeration}}
+{{define "Enums"}}
+	{{$type := replaceReservedWords .Name | makePublic}}
+	type {{$type}} string
 	const (
-		{{with .Restriction}}
-			{{range .Enumeration}}
-				{{if .Doc}} {{.Doc | comment}} {{end}}
-				{{$type}}{{$value := replaceReservedWords .Value}}{{$value | makePublic}} {{$type}} = "{{goString .Value}}" {{end}}
+		{{$scope := .Restriction}}
+		{{if .List.SimpleType}}
+			{{$scope = .List.SimpleType.Restriction}}			
+		{{end}}
+		
+		{{with $scope}}
+				{{range $i,$_ := .Enumeration}}
+					{{if .Doc}} {{.Doc | comment}} {{end}}							
+					{{$type}}{{$value := replaceReservedWords .Value}}{{$value | makePublic}} {{$type}} = "{{goString .Value}}" 
+				{{end}}
 		{{end}}
 	)
-	{{end}}
 {{end}}
+
 
 {{define "ComplexContent"}}
 	{{$baseType := toGoType .Extension.Base}}
